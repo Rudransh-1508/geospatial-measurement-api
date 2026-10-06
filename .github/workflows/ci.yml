@@ -1,0 +1,47 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    services:
+      db:
+        image: postgis/postgis:16-3.4
+        env:
+          POSTGRES_USER: geomeasure
+          POSTGRES_PASSWORD: geomeasure
+          POSTGRES_DB: geomeasure
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U geomeasure -d geomeasure"
+          --health-interval 2s --health-timeout 3s --health-retries 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - run: uv sync --frozen
+      - name: Lint
+        run: uv run ruff check . && uv run ruff format --check .
+      - name: Type check
+        run: uv run mypy app tests scripts
+      - name: Migrations match models
+        run: uv run alembic upgrade head && uv run alembic check
+      - name: Tests
+        run: uv run pytest
+
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - run: uv sync --frozen
+      - name: Start stack
+        run: docker compose up -d --build --wait
+      - name: End-to-end tests
+        run: E2E_BASE_URL=http://localhost:8000 uv run pytest tests/e2e -v
+      - name: Logs on failure
+        if: failure()
+        run: docker compose logs
