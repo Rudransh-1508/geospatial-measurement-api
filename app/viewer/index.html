@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Measurement Viewer</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+<style>
+  :root {
+    --bg: #f6f7f9; --panel: #ffffff; --text: #1d2330; --muted: #5c6577; --line: #e3e6ec;
+    --area: #2563eb; --length: #d97706; --point: #059669; --bad: #dc2626; --chip: #eef1f5;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #11141a; --panel: #181c24; --text: #e7eaf0; --muted: #9aa3b5; --line: #2a303c;
+      --area: #60a5fa; --length: #fbbf24; --point: #34d399; --bad: #f87171; --chip: #232936;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    background: var(--bg); color: var(--text);
+    font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    display: grid; grid-template-rows: auto 1fr;
+  }
+  header {
+    display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 16px;
+    padding: 12px 16px; background: var(--panel); border-bottom: 1px solid var(--line);
+  }
+  h1 { font-size: 16px; margin: 0; font-weight: 600; overflow-wrap: anywhere; }
+  .meta { color: var(--muted); font-size: 13px; display: flex; flex-wrap: wrap; gap: 4px 14px; }
+  .meta b { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; }
+  .status { font-size: 12px; font-weight: 600; padding: 1px 8px; border-radius: 999px; background: var(--chip); }
+  .status.FAILED { color: var(--bad); }
+  main { display: grid; grid-template-columns: 1fr 360px; min-height: 0; }
+  #map { min-height: 0; }
+  aside { background: var(--panel); border-left: 1px solid var(--line); overflow-y: auto; min-height: 0; }
+  ul { list-style: none; margin: 0; padding: 0; }
+  li { padding: 10px 16px; border-bottom: 1px solid var(--line); cursor: pointer; }
+  li:hover, li.active { background: var(--chip); }
+  li .row { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; }
+  li .name { font-weight: 600; overflow-wrap: anywhere; }
+  li .value { font-variant-numeric: tabular-nums; white-space: nowrap; }
+  li .sub { color: var(--muted); font-size: 12px; margin-top: 2px; }
+  .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; vertical-align: 1px; }
+  .message { padding: 24px 16px; color: var(--muted); }
+  .leaflet-popup-content { font: 13px/1.45 system-ui, sans-serif; margin: 10px 12px; }
+  .leaflet-popup-content table { border-collapse: collapse; }
+  .leaflet-popup-content td { padding: 1px 8px 1px 0; vertical-align: top; }
+  .leaflet-popup-content td:first-child { color: #5c6577; }
+  @media (max-width: 760px) {
+    main { grid-template-columns: 1fr; grid-template-rows: 55vh auto; }
+    aside { border-left: 0; border-top: 1px solid var(--line); }
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1 id="title">Loading…</h1>
+  <span id="status" class="status" hidden></span>
+  <div class="meta" id="meta"></div>
+</header>
+<main>
+  <div id="map"></div>
+  <aside><ul id="list"><li class="message">Loading features…</li></ul></aside>
+</main>
+<script>
+(() => {
+  const fileId = location.pathname.split("/").filter(Boolean).pop();
+  const css = getComputedStyle(document.documentElement);
+  const colour = (f) => {
+    if (f.status === "unsupported") return css.getPropertyValue("--bad").trim();
+    if (!f.measurement) return css.getPropertyValue("--point").trim();
+    return css.getPropertyValue(f.measurement.kind === "area" ? "--area" : "--length").trim();
+  };
+  const nf = new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 });
+  const fmtArea = (m2) => m2 >= 1e6 ? `${nf.format(m2 / 1e6)} km²` : m2 >= 1e4 ? `${nf.format(m2 / 1e4)} ha` : `${nf.format(m2)} m²`;
+  const fmtLength = (m) => m >= 1000 ? `${nf.format(m / 1000)} km` : `${nf.format(m)} m`;
+  const fmtValue = (m) => m.kind === "area" ? fmtArea(m.value) : fmtLength(m.value);
+  const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  // Leaflet joins 179.9 and -179.9 the long way round. Shift a feature's western
+  // longitudes by 360 when it spans more than half the globe so it draws where it is.
+  function unwrap(geometry) {
+    const lons = [];
+    const walk = (c, fn) => typeof c[0] === "number" ? fn(c) : c.forEach((x) => walk(x, fn));
+    const coords = geometry.type === "GeometryCollection" ? null : geometry.coordinates;
+    if (!coords) return geometry;
+    walk(coords, (p) => lons.push(p[0]));
+    if (Math.max(...lons) - Math.min(...lons) <= 180) return geometry;
+    const copy = JSON.parse(JSON.stringify(geometry));
+    walk(copy.coordinates, (p) => { if (p[0] < 0) p[0] += 360; });
+    return copy;
+  }
+  const label = (f) => f.properties.Name || f.properties.name || f.properties.NAME || `Feature ${f.id}`;
+
+  const map = L.map("map", { worldCopyJump: true }).setView([20, 78], 4);
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    maxZoom: 19, attribution: "&copy; OpenStreetMap contributors",
+  }).addTo(map);
+
+  const $ = (id) => document.getElementById(id);
+  const showMessage = (text) => { $("list").innerHTML = `<li class="message">${esc(text)}</li>`; };
+
+  function popup(f) {
+    const rows = [["Layer", f.layer], ["Type", f.geometry_type], ["CRS", f.crs]];
+    if (f.measurement) {
+      const m = f.measurement;
+      rows.push([m.kind === "area" ? "Area" : "Length", fmtValue(m)]);
+      if (m.perimeter != null) rows.push(["Perimeter", fmtLength(m.perimeter)]);
+      rows.push(["Geodesic", m.kind === "area" ? fmtArea(m.geodesic_value) : fmtLength(m.geodesic_value)]);
+      if (m.relative_difference != null) rows.push(["Rel. diff", m.relative_difference.toExponential(1)]);
+      rows.push(["Method", m.method]);
+    }
+    if (f.reason) rows.push(["Reason", f.reason]);
+    if (f.warnings.length) rows.push(["Warnings", f.warnings.join(", ")]);
+    for (const [k, v] of Object.entries(f.properties)) rows.push([k, v]);
+    return `<strong>${esc(label(f))}</strong><table>${rows.map(([k, v]) => `<tr><td>${esc(k)}</td><td>${esc(v ?? "")}</td></tr>`).join("")}</table>`;
+  }
+
+  async function fetchJson(url) {
+    const res = await fetch(url);
+    const body = await res.json();
+    if (!res.ok) throw new Error(body.detail || res.statusText);
+    return body;
+  }
+
+  async function load() {
+    let info;
+    try {
+      info = await fetchJson(`/api/files/${fileId}/`);
+    } catch (e) {
+      $("title").textContent = "File not found";
+      showMessage(e.message);
+      return;
+    }
+    document.title = `${info.filename} · Measurement Viewer`;
+    $("title").textContent = info.filename;
+    $("status").hidden = false;
+    $("status").textContent = info.status;
+    $("status").className = `status ${info.status}`;
+
+    if (info.status === "PENDING" || info.status === "PROCESSING") {
+      showMessage("Processing… this page refreshes automatically.");
+      setTimeout(load, 1500);
+      return;
+    }
+    if (info.status === "FAILED") { showMessage(info.error || "Processing failed."); return; }
+
+    const features = [];
+    let page;
+    let offset = 0;
+    do {
+      page = await fetchJson(`/api/files/${fileId}/measurements/?limit=1000&offset=${offset}`);
+      features.push(...page.features);
+      offset += page.pagination.limit;
+    } while (offset < page.pagination.total);
+
+    const t = page.totals;
+    $("meta").innerHTML = [
+      `<span><b>${t.feature_count}</b> features</span>`,
+      `<span>CRS <b>${esc(page.crs ?? "unknown")}</b>${page.crs_assumed ? " (assumed)" : ""}</span>`,
+      t.area_m2 ? `<span>Total area <b>${fmtArea(t.area_m2)}</b></span>` : "",
+      t.length_m ? `<span>Total length <b>${fmtLength(t.length_m)}</b></span>` : "",
+    ].join("");
+
+    const list = $("list");
+    list.innerHTML = "";
+    const bounds = L.latLngBounds([]);
+    const items = [];
+
+    for (const f of features) {
+      let layer = null;
+      if (f.geometry) {
+        const c = colour(f);
+        layer = L.geoJSON(unwrap(f.geometry), {
+          style: { color: c, weight: 2, fillOpacity: 0.2 },
+          pointToLayer: (_, latlng) => L.circleMarker(latlng, { radius: 6, color: c, fillOpacity: 0.8 }),
+        }).bindPopup(popup(f), { maxWidth: 320 }).addTo(map);
+        bounds.extend(layer.getBounds());
+      }
+      const li = document.createElement("li");
+      const value = f.measurement ? fmtValue(f.measurement) : (f.reason || f.status.replace("_", " "));
+      li.innerHTML = `<div class="row"><span class="name"><span class="dot" style="background:${colour(f)}"></span>${esc(label(f))}</span><span class="value">${esc(value)}</span></div>`
+        + `<div class="sub">${esc(f.geometry_type ?? "No geometry")} · ${esc(f.layer)}${f.warnings.length ? " · " + esc(f.warnings.join(", ")) : ""}</div>`;
+      li.addEventListener("click", () => {
+        items.forEach((el) => el.classList.remove("active"));
+        li.classList.add("active");
+        if (layer) { map.fitBounds(layer.getBounds(), { maxZoom: 17, padding: [40, 40] }); layer.openPopup(); }
+      });
+      items.push(li);
+      list.appendChild(li);
+    }
+    if (!features.length) showMessage("This file has no features.");
+    if (bounds.isValid()) map.fitBounds(bounds, { maxZoom: 17, padding: [30, 30] });
+  }
+
+  load().catch((e) => showMessage(e.message));
+})();
+</script>
+</body>
+</html>
