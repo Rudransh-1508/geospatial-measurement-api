@@ -1,0 +1,56 @@
+[project]
+name = "geomeasure"
+version = "0.1.0"
+description = "Geospatial file measurement API: upload Shapefile/KML, get accurate areas and lengths."
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "alembic>=1.20.0",
+    "celery>=5.6.3",
+    "fastapi>=0.142.2",
+    "geoalchemy2>=0.20.0",
+    "psycopg[binary]>=3.3.6",
+    "pydantic-settings>=2.15.0",
+    "pyogrio>=0.13.0",
+    "pyproj>=3.8.0",
+    "python-multipart>=0.0.32",
+    "redis>=8.1.0",
+    "shapely>=2.1.2",
+    "sqlalchemy>=2",
+    "uvicorn[standard]>=0.54.0",
+]
+
+[tool.uv]
+package = false
+
+[dependency-groups]
+dev = [
+    "celery-types>=0.26.0",
+    "httpx2>=2.13.1",
+    "matplotlib>=3.11.2",
+    "mypy>=2.4.0",
+    "pytest>=9.1.1",
+    "ruff>=0.16.10",
+]
+
+[tool.ruff]
+line-length = 110
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "SIM", "RUF", "PL", "N"]
+ignore = ["PLR2004", "PLR0913", "PLR0915", "PLR0912", "PLC0415", "RUF001", "RUF002", "RUF003"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+plugins = ["pydantic.mypy"]
+exclude = ["migrations/"]
+
+[[tool.mypy.overrides]]
+module = ["pyogrio.*", "geoalchemy2.*", "shapely.*"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
+markers = ["e2e: runs against a live docker compose stack (set E2E_BASE_URL)"]
