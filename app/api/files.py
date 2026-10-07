@@ -76,13 +76,17 @@ def _safe_filename(name: str) -> str:
     return cleaned[:200] or "upload"
 
 
-async def _store(file: UploadFile, dest: Path, max_bytes: int) -> tuple[int, bytes]:
-    """Stream the upload to disk, enforcing the size limit as bytes arrive."""
+def _store(file: UploadFile, dest: Path, max_bytes: int) -> tuple[int, bytes]:
+    """Copy the upload to its permanent location, keeping the first bytes for sniffing.
+
+    Requests that declare an oversized Content-Length are rejected by middleware before
+    the body is read; this check covers bodies sent without one.
+    """
     size = 0
     head = b""
     dest.parent.mkdir(parents=True, exist_ok=True)
     with dest.open("wb") as out:
-        while chunk := await file.read(CHUNK):
+        while chunk := file.file.read(CHUNK):
             if len(head) < SNIFF_BYTES:
                 head += chunk[: SNIFF_BYTES - len(head)]
             size += len(chunk)
@@ -117,7 +121,7 @@ def _get_upload(session: Session, file_id: uuid.UUID) -> Upload:
     },
     summary="Upload a .zip Shapefile, .kml or .kmz",
 )
-async def upload_file(
+def upload_file(
     file: UploadFile,
     session: SessionDep,
     response: Response,
@@ -137,7 +141,7 @@ async def upload_file(
         raise HTTPException(status.HTTP_415_UNSUPPORTED_MEDIA_TYPE, str(exc)) from exc
 
     try:
-        size, head = await _store(file, stored_path, settings.max_upload_bytes)
+        size, head = _store(file, stored_path, settings.max_upload_bytes)
         try:
             check_content(file_format, filename, head)
             validate_upload(stored_path, file_format, archive_limits())

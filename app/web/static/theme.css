@@ -1,0 +1,58 @@
+/* Shared tokens for the home page and the map viewer. */
+:root {
+  --paper: #f3f5f2;      /* plan-sheet paper */
+  --sheet: #fbfcfa;      /* drawing area */
+  --grid: #e3e8e2;       /* graticule */
+  --line: #d6ddd5;
+  --ink: #16201a;        /* green-black ink */
+  --ink-2: #4a564e;
+  --ink-3: #6f7a72;
+  --contour: #2f6b4f;    /* contour green: measured, links */
+  --flag: #d6336c;       /* survey flagging tape: the one accent */
+  --bad: #b42318;
+  --bad-bg: #fbeceb;
+  --area: #2f6b4f;
+  --length: #b5651d;
+  --point: #4b5fa8;
+  --font-display: "Archivo", "Helvetica Neue", Arial, sans-serif;
+  --font-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #0f1512; --sheet: #141c17; --grid: #1e2922; --line: #2a362e;
+    --ink: #e4ece6; --ink-2: #aab6ad; --ink-3: #85918a;
+    --contour: #6fbf95; --flag: #ff5c93; --bad: #ff7b6e; --bad-bg: #2a1614;
+    --area: #6fbf95; --length: #e3a35b; --point: #93a6f0;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #0f1512; --sheet: #141c17; --grid: #1e2922; --line: #2a362e;
+  --ink: #e4ece6; --ink-2: #aab6ad; --ink-3: #85918a;
+  --contour: #6fbf95; --flag: #ff5c93; --bad: #ff7b6e; --bad-bg: #2a1614;
+  --area: #6fbf95; --length: #e3a35b; --point: #93a6f0;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body { background: var(--paper); color: var(--ink); font: 15px/1.5 var(--font-body); -webkit-font-smoothing: antialiased; }
+a { color: inherit; }
+
+.topbar {
+  display: flex; align-items: center; justify-content: space-between; gap: 16px;
+  padding: 0 24px; height: 52px; border-bottom: 1px solid var(--line); background: var(--paper);
+}
+.brand {
+  font-family: var(--font-display); font-stretch: 125%; font-weight: 800; font-size: 15px;
+  text-decoration: none; letter-spacing: 0.01em; display: inline-flex; align-items: center; gap: 10px;
+}
+.brand::before { content: ""; width: 10px; height: 10px; background: var(--flag); transform: rotate(45deg); }
+.topbar nav { display: flex; gap: 18px; font-size: 14px; }
+.topbar nav a { color: var(--ink-2); text-decoration: none; }
+.topbar nav a:hover { color: var(--ink); text-decoration: underline; }
+.topbar a:focus-visible { outline: 2px solid var(--flag); outline-offset: 3px; }
+.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+@media (max-width: 760px) { .topbar { padding: 0 16px; } }

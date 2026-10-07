@@ -2,7 +2,7 @@
 
 ## Decision
 - Accepted: `.zip` (Shapefile), `.kml`, `.kmz`. Detected by extension and verified by content (zip magic bytes, KML root element).
-- Max upload size 50 MB (setting `MAX_UPLOAD_BYTES`), enforced while streaming to disk.
+- Max upload size 50 MB (setting `MAX_UPLOAD_BYTES`). Starlette parses the whole multipart body before an endpoint runs, so the limit is enforced in two places: a small ASGI middleware rejects requests whose `Content-Length` exceeds it before any body is read, and the endpoint re-checks the bytes actually received for bodies sent without a `Content-Length`.
 - Zip safety on `.zip` and `.kmz`:
   - Reject entries with absolute paths or `..` (zip-slip).
   - Reject archives whose total uncompressed size exceeds 500 MB or whose compression ratio is extreme (zip bomb).

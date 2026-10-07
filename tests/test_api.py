@@ -290,3 +290,54 @@ def test_viewer_page(client: TestClient) -> None:
     response = client.get(f"/viewer/{uuid.uuid4()}")
     assert response.status_code == 200
     assert "leaflet" in response.text.lower()
+
+
+def test_home_page_and_static_assets(client: TestClient) -> None:
+    home = client.get("/")
+    assert home.status_code == 200 and "Drop a survey file" in home.text
+    assert client.get("/static/theme.css").status_code == 200
+    assert client.get("/static/format.js").status_code == 200
+    assert client.get("/samples/pune_survey.kml").status_code == 200
+
+
+def test_inline_processing_does_not_block_other_requests(
+    client: TestClient, survey_kml: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Regression: a slow ?wait=true upload must not stall the event loop for everyone else."""
+    import threading
+    import time
+
+    from app.api import files
+
+    real_process = process_upload
+
+    def slow_process(session: Session, upload_id: uuid.UUID) -> UploadStatus | None:
+        time.sleep(1.5)
+        return real_process(session, upload_id)
+
+    monkeypatch.setattr(files, "process_upload", slow_process)
+    uploader = threading.Thread(target=upload, args=(client, survey_kml))
+    uploader.start()
+    time.sleep(0.3)  # let the upload reach processing
+
+    started = time.monotonic()
+    assert client.get("/api/health/").status_code == 200
+    elapsed = time.monotonic() - started
+    uploader.join()
+
+    assert elapsed < 0.5, f"health check waited {elapsed:.2f}s behind inline processing"
+
+
+def test_oversize_upload_is_rejected_before_the_body_is_read(
+    client: TestClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from app.core.config import get_settings
+
+    monkeypatch.setattr(get_settings(), "max_upload_bytes", 100)
+    path = tmp_path / "big.kml"
+    path.write_bytes(b"<kml>" + b" " * 200_000 + b"</kml>")
+
+    result = upload(client, path)
+
+    assert result["status_code"] == 413
+    assert "limit" in result["json"]["detail"]

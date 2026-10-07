@@ -6,11 +6,12 @@ these tests check our numbers rather than re-running the same library.
 
 import math
 
+import numpy as np
 import pytest
 import shapely
 from pyproj import Transformer
 
-from app.processing.measure import feature_centre, measure
+from app.processing.measure import CENTRE_GRID_DEG, feature_centre, measure
 
 # WGS84
 A = 6378137.0
@@ -217,5 +218,22 @@ def test_projection_string_is_centred_on_the_feature() -> None:
     assert m is not None
     assert "+proj=laea" in m.projection
     params = dict(part.lstrip("+").split("=") for part in m.projection.split() if "=" in part)
-    assert float(params["lat_0"]) == pytest.approx(28.605, abs=1e-4)
-    assert float(params["lon_0"]) == pytest.approx(77.205, abs=1e-4)
+    # Centres snap to a 0.01 degree grid so nearby features share transformers.
+    assert float(params["lat_0"]) == pytest.approx(28.605, abs=CENTRE_GRID_DEG / 2 + 1e-9)
+    assert float(params["lon_0"]) == pytest.approx(77.205, abs=CENTRE_GRID_DEG / 2 + 1e-9)
+
+
+def test_snapping_the_centre_does_not_change_the_result() -> None:
+    """Measure with the exact centre and with the snapped one; results must agree."""
+    plot = cell(77.2031, 28.6047, 77.2112, 28.6118)
+    route = shapely.LineString([(77.2031, 28.6047), (77.2389, 28.6342), (77.2601, 28.6503)])
+
+    for geom, area in ((plot, True), (route, False)):
+        snapped = measure(geom).measurement
+        assert snapped is not None
+        lon, lat = feature_centre(geom)
+        exact_proj = f"+proj={'laea' if area else 'aeqd'} +lat_0={lat} +lon_0={lon} +datum=WGS84 +units=m"
+        t = Transformer.from_crs("EPSG:4326", exact_proj, always_xy=True)
+        projected = shapely.transform(geom, lambda c, t=t: np.column_stack(t.transform(c[:, 0], c[:, 1])))
+        exact = projected.area if area else projected.length
+        assert snapped.value == pytest.approx(exact, rel=1e-8)

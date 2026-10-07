@@ -1,0 +1,301 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Survey Measure</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@125,600;125,800&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/theme.css">
+<style>
+  .page { max-width: 1080px; margin: 0 auto; padding: 0 24px 64px; }
+
+  /* Intro */
+  .intro { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 40px; align-items: end; padding: 48px 0 28px; }
+  h1 {
+    font-family: var(--font-display); font-stretch: 125%; font-weight: 800;
+    font-size: clamp(30px, 4.2vw, 46px); line-height: 1.04; letter-spacing: -0.01em; margin: 0;
+  }
+  .lede { margin: 0; color: var(--ink-2); font-size: 16px; max-width: 46ch; }
+  .lede strong { color: var(--ink); font-weight: 600; }
+
+  /* Drop zone: drawn as a surveyed plot with flagged corners */
+  .plot {
+    position: relative; display: grid; place-items: center; text-align: center;
+    min-height: 260px; padding: 40px 24px; margin: 8px 0 0; cursor: pointer;
+    background-color: var(--sheet);
+    background-image:
+      linear-gradient(var(--grid) 1px, transparent 1px),
+      linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+    background-size: 32px 32px; background-position: -1px -1px;
+  }
+  .plot svg.boundary { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
+  .plot rect.edge { fill: none; stroke: var(--contour); stroke-width: 2; vector-effect: non-scaling-stroke; }
+  .plot.dragging rect.edge { stroke: var(--flag); stroke-dasharray: 10 7; animation: digitize 0.9s linear infinite; }
+  @keyframes digitize { to { stroke-dashoffset: -17; } }
+  .flag { position: absolute; width: 16px; height: 16px; }
+  .flag::before { content: ""; position: absolute; inset: 3px; background: var(--flag); transform: rotate(45deg); }
+  .flag.tl { left: -8px; top: -8px; } .flag.tr { right: -8px; top: -8px; }
+  .flag.bl { left: -8px; bottom: -8px; } .flag.br { right: -8px; bottom: -8px; }
+  .flag span {
+    position: absolute; font: 500 10px/1 var(--font-mono); color: var(--ink-3); white-space: nowrap;
+  }
+  .flag.tl span { left: 18px; top: -11px; } .flag.br span { right: 18px; bottom: -11px; }
+  .plot-inner { position: relative; display: grid; gap: 10px; justify-items: center; }
+  .plot-title { font-family: var(--font-display); font-stretch: 125%; font-weight: 600; font-size: 20px; margin: 0; }
+  .plot-hint { color: var(--ink-2); margin: 0; }
+  .plot input { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+  .plot:focus-within { outline: 2px solid var(--flag); outline-offset: 6px; }
+  .button {
+    display: inline-flex; align-items: center; gap: 8px; border: 0; cursor: pointer;
+    font: 600 14px/1 var(--font-body); padding: 11px 16px; border-radius: 6px;
+    background: var(--ink); color: var(--paper);
+  }
+  .button:hover { background: var(--contour); }
+
+  .samples { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; margin: 30px 0 0; color: var(--ink-2); font-size: 14px; }
+  .chip {
+    font: 500 13px/1 var(--font-mono); padding: 7px 10px; border-radius: 999px; cursor: pointer;
+    border: 1px solid var(--line); background: var(--paper); color: var(--ink);
+  }
+  .chip:hover { border-color: var(--contour); color: var(--contour); }
+  .chip:focus-visible, .button:focus-visible, .open:focus-visible { outline: 2px solid var(--flag); outline-offset: 2px; }
+
+  .notice { margin: 16px 0 0; padding: 12px 14px; border-left: 3px solid var(--bad); background: var(--bad-bg); color: var(--ink); display: flex; gap: 12px; justify-content: space-between; align-items: start; }
+  .notice button { background: none; border: 0; color: var(--ink-2); cursor: pointer; font: inherit; padding: 0; }
+
+  /* Uploads register */
+  .register { margin-top: 48px; }
+  .register-head { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; border-bottom: 2px solid var(--ink); padding-bottom: 8px; }
+  h2 { font-family: var(--font-display); font-stretch: 125%; font-weight: 600; font-size: 18px; margin: 0; }
+  .register-head .count { font: 500 13px var(--font-mono); color: var(--ink-3); }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th { text-align: left; font: 500 11px/1 var(--font-mono); text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink-3); padding: 14px 10px 10px; }
+  td { padding: 12px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th:first-child, td:first-child { padding-left: 0; }
+  th:last-child, td:last-child { padding-right: 0; text-align: right; }
+  .num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+  th.num { text-align: right; }
+  .file { font-weight: 600; overflow-wrap: break-word; }
+  .file small { display: block; white-space: nowrap; font: 400 12px var(--font-mono); color: var(--ink-3); margin-top: 2px; }
+  .error-text { display: block; color: var(--bad); font-weight: 400; font-size: 13px; margin-top: 4px; }
+  .status { display: inline-flex; align-items: center; gap: 6px; font: 500 12px var(--font-mono); white-space: nowrap; }
+  .status::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--ink-3); }
+  .status.COMPLETED::before { background: var(--contour); }
+  .status.FAILED { color: var(--bad); } .status.FAILED::before { background: var(--bad); }
+  .status.PENDING::before, .status.PROCESSING::before, .status.UPLOADING::before { background: var(--flag); animation: pulse 1s ease-in-out infinite; }
+  @keyframes pulse { 50% { opacity: 0.25; } }
+  .open { color: var(--contour); font-weight: 600; text-decoration: none; white-space: nowrap; }
+  .open:hover { text-decoration: underline; }
+  .muted { color: var(--ink-3); }
+  .empty { padding: 28px 0; color: var(--ink-2); }
+
+  @media (max-width: 760px) {
+    .page { padding: 0 16px 48px; }
+    .intro { grid-template-columns: 1fr; gap: 14px; padding-top: 28px; }
+    .plot { min-height: 220px; }
+    .hide-sm { display: none; }
+    td, th { padding-left: 6px; padding-right: 6px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .plot.dragging rect.edge, .status::before { animation: none !important; }
+  }
+</style>
+</head>
+<body>
+<header class="topbar">
+  <a class="brand" href="/">Survey Measure</a>
+  <nav><a href="/docs">API docs</a></nav>
+</header>
+
+<main class="page">
+  <section class="intro">
+    <h1>Measure every plot in a survey file.</h1>
+    <p class="lede">Drop a <strong>Shapefile (.zip)</strong>, <strong>KML</strong> or <strong>KMZ</strong>. Every polygon gets its area and every line its length, measured in a projection centred on that feature and checked against the WGS84 ellipsoid.</p>
+  </section>
+
+  <label class="plot" id="plot">
+    <svg class="boundary" aria-hidden="true"><rect class="edge" x="0" y="0" width="100%" height="100%"></rect></svg>
+    <span class="flag tl" aria-hidden="true"><span>N 18.5352  E 73.7801</span></span>
+    <span class="flag tr" aria-hidden="true"></span>
+    <span class="flag bl" aria-hidden="true"></span>
+    <span class="flag br" aria-hidden="true"><span>N 18.5316  E 73.7853</span></span>
+    <span class="plot-inner">
+      <p class="plot-title">Drop a survey file here</p>
+      <p class="plot-hint">.zip Shapefile, .kml or .kmz, up to 50 MB</p>
+      <span class="button" aria-hidden="true">Choose file</span>
+      <input id="file" type="file" accept=".zip,.kml,.kmz" multiple aria-label="Choose survey files">
+    </span>
+  </label>
+
+  <div class="samples">
+    <span>No file to hand? Measure a sample:</span>
+    <button class="chip" data-sample="pune_survey.kml">pune_survey.kml</button>
+    <button class="chip" data-sample="parcels_utm43n.zip">parcels_utm43n.zip</button>
+    <button class="chip" data-sample="edge_cases.kml">edge_cases.kml</button>
+    <button class="chip" data-sample="village_layers.zip">village_layers.zip</button>
+  </div>
+
+  <div id="notices" aria-live="polite"></div>
+
+  <section class="register" aria-labelledby="register-title">
+    <div class="register-head">
+      <h2 id="register-title">Measured files</h2>
+      <span class="count" id="count"></span>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th>File</th>
+          <th>Status</th>
+          <th class="num hide-sm">Features</th>
+          <th class="hide-sm">CRS</th>
+          <th class="num hide-sm">Total area</th>
+          <th class="num hide-sm">Total length</th>
+          <th><span class="visually-hidden">Map</span></th>
+        </tr>
+      </thead>
+      <tbody id="rows"><tr><td colspan="7" class="empty">Loading…</td></tr></tbody>
+    </table>
+  </section>
+</main>
+
+<script src="/static/format.js"></script>
+<script>
+(() => {
+  const { fmtArea, fmtLength, esc } = window.SurveyFormat;
+  const $ = (id) => document.getElementById(id);
+  const FINAL = new Set(["COMPLETED", "FAILED"]);
+  const files = new Map();      // id -> file info (from the API) or local placeholder
+  const totals = new Map();     // id -> measurement totals, fetched once per completed file
+  let total = 0;
+
+  function notice(text) {
+    const el = document.createElement("div");
+    el.className = "notice";
+    el.innerHTML = `<span>${esc(text)}</span><button type="button" aria-label="Dismiss">Dismiss</button>`;
+    el.querySelector("button").addEventListener("click", () => el.remove());
+    $("notices").prepend(el);
+  }
+
+  function row(f) {
+    const t = totals.get(f.id);
+    const statusLabel = f.status === "UPLOADING" ? `UPLOADING ${f.progress ?? 0}%` : f.status;
+    const sub = f.file_format ? `${f.file_format} · ${(f.size_bytes / 1024).toFixed(1)} KB` : "";
+    const error = f.status === "FAILED" && f.error ? `<span class="error-text">${esc(f.error)}</span>` : "";
+    const crs = f.crs ? `${esc(f.crs)}${f.crs_assumed ? ' <span class="muted">(assumed)</span>' : ""}` : '<span class="muted">-</span>';
+    const dash = '<span class="muted">-</span>';
+    const link = f.status === "COMPLETED" ? `<a class="open" href="/viewer/${f.id}">Open map</a>` : "";
+    return `<tr>
+      <td class="file">${esc(f.filename)}<small>${esc(sub)}</small>${error}</td>
+      <td><span class="status ${esc(f.status)}">${esc(statusLabel)}</span></td>
+      <td class="num hide-sm">${f.feature_count ?? dash}</td>
+      <td class="hide-sm">${crs}</td>
+      <td class="num hide-sm">${t ? (t.area_m2 ? fmtArea(t.area_m2) : dash) : dash}</td>
+      <td class="num hide-sm">${t ? (t.length_m ? fmtLength(t.length_m) : dash) : dash}</td>
+      <td>${link}</td>
+    </tr>`;
+  }
+
+  function render() {
+    const list = [...files.values()].sort((a, b) => (b.created_at || "").localeCompare(a.created_at || ""));
+    $("rows").innerHTML = list.length
+      ? list.map(row).join("")
+      : '<tr><td colspan="7" class="empty">Nothing measured yet. Drop a file above or try a sample.</td></tr>';
+    const shown = [...files.values()].filter((f) => f.status !== "UPLOADING").length;
+    $("count").textContent = !total ? "" : shown < total ? `Latest ${shown} of ${total} files` : `${total} file${total === 1 ? "" : "s"}`;
+  }
+
+  async function loadTotals(id) {
+    if (totals.has(id)) return;
+    const res = await fetch(`/api/files/${id}/measurements/?limit=1&include_geometry=false`);
+    if (res.ok) { totals.set(id, (await res.json()).totals); render(); }
+  }
+
+  async function poll(id) {
+    const res = await fetch(`/api/files/${id}/`);
+    if (!res.ok) return;
+    const info = await res.json();
+    files.set(id, info);
+    render();
+    if (info.status === "COMPLETED") loadTotals(id);
+    if (!FINAL.has(info.status)) setTimeout(() => poll(id), 800);
+  }
+
+  function upload(file) {
+    const tempId = `local-${crypto.randomUUID()}`;
+    files.set(tempId, { id: tempId, filename: file.name, status: "UPLOADING", progress: 0, created_at: new Date(Date.now() + 1e9).toISOString() });
+    render();
+
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", "/api/files/");
+    xhr.upload.addEventListener("progress", (e) => {
+      if (!e.lengthComputable) return;
+      files.get(tempId).progress = Math.round((e.loaded / e.total) * 100);
+      render();
+    });
+    xhr.addEventListener("load", () => {
+      files.delete(tempId);
+      let body = {};
+      try { body = JSON.parse(xhr.responseText); } catch { /* non-JSON error page */ }
+      if (xhr.status === 202 || xhr.status === 201) {
+        total += 1;
+        files.set(body.id, body);
+        render();
+        poll(body.id);
+      } else {
+        render();
+        notice(`${file.name} was not uploaded: ${body.detail || `the server responded ${xhr.status}.`}`);
+      }
+    });
+    xhr.addEventListener("error", () => {
+      files.delete(tempId);
+      render();
+      notice(`${file.name} was not uploaded: the server could not be reached.`);
+    });
+    const form = new FormData();
+    form.append("file", file);
+    xhr.send(form);
+  }
+
+  const plot = $("plot");
+  const input = $("file");
+  input.addEventListener("change", () => { [...input.files].forEach(upload); input.value = ""; });
+  ["dragenter", "dragover"].forEach((t) => plot.addEventListener(t, (e) => { e.preventDefault(); plot.classList.add("dragging"); }));
+  ["dragleave", "dragend"].forEach((t) => plot.addEventListener(t, (e) => {
+    if (!plot.contains(e.relatedTarget)) plot.classList.remove("dragging");
+  }));
+  plot.addEventListener("drop", (e) => {
+    e.preventDefault();
+    plot.classList.remove("dragging");
+    [...e.dataTransfer.files].forEach(upload);
+  });
+  // Dropping a file anywhere else would navigate away from the page.
+  window.addEventListener("dragover", (e) => e.preventDefault());
+  window.addEventListener("drop", (e) => e.preventDefault());
+
+  document.querySelectorAll("[data-sample]").forEach((btn) => btn.addEventListener("click", async () => {
+    const name = btn.dataset.sample;
+    const res = await fetch(`/samples/${name}`);
+    if (!res.ok) { notice(`The sample ${name} is not available on this server.`); return; }
+    upload(new File([await res.blob()], name));
+  }));
+
+  async function init() {
+    const res = await fetch("/api/files/?limit=20");
+    if (!res.ok) { $("rows").innerHTML = '<tr><td colspan="7" class="empty">The API is not responding. Check that the server is running.</td></tr>'; return; }
+    const data = await res.json();
+    total = data.total;
+    data.items.forEach((f) => {
+      files.set(f.id, f);
+      if (f.status === "COMPLETED") loadTotals(f.id);
+      else if (!FINAL.has(f.status)) poll(f.id);
+    });
+    render();
+  }
+  init();
+})();
+</script>
+</body>
+</html>

@@ -3,72 +3,72 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Measurement Viewer</title>
+<title>Survey Measure</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
       integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
         integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@125,600;125,800&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/theme.css">
 <style>
-  :root {
-    --bg: #f6f7f9; --panel: #ffffff; --text: #1d2330; --muted: #5c6577; --line: #e3e6ec;
-    --area: #2563eb; --length: #d97706; --point: #059669; --bad: #dc2626; --chip: #eef1f5;
+  html, body { height: 100%; }
+  body { display: grid; grid-template-rows: auto auto 1fr; }
+  .filehead {
+    display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 18px;
+    padding: 14px 24px; border-bottom: 1px solid var(--line);
   }
-  @media (prefers-color-scheme: dark) {
-    :root {
-      --bg: #11141a; --panel: #181c24; --text: #e7eaf0; --muted: #9aa3b5; --line: #2a303c;
-      --area: #60a5fa; --length: #fbbf24; --point: #34d399; --bad: #f87171; --chip: #232936;
-    }
-  }
-  * { box-sizing: border-box; }
-  html, body { height: 100%; margin: 0; }
-  body {
-    background: var(--bg); color: var(--text);
-    font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-    display: grid; grid-template-rows: auto 1fr;
-  }
-  header {
-    display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 16px;
-    padding: 12px 16px; background: var(--panel); border-bottom: 1px solid var(--line);
-  }
-  h1 { font-size: 16px; margin: 0; font-weight: 600; overflow-wrap: anywhere; }
-  .meta { color: var(--muted); font-size: 13px; display: flex; flex-wrap: wrap; gap: 4px 14px; }
-  .meta b { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; }
-  .status { font-size: 12px; font-weight: 600; padding: 1px 8px; border-radius: 999px; background: var(--chip); }
-  .status.FAILED { color: var(--bad); }
+  h1 { font-family: var(--font-display); font-stretch: 125%; font-weight: 600; font-size: 18px; margin: 0; overflow-wrap: anywhere; }
+  .meta { color: var(--ink-2); font-size: 13px; display: flex; flex-wrap: wrap; gap: 4px 16px; }
+  .meta b { color: var(--ink); font: 500 13px var(--font-mono); }
+  .status { display: inline-flex; align-items: center; gap: 6px; font: 500 12px var(--font-mono); }
+  .status::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--contour); }
+  .status.FAILED { color: var(--bad); } .status.FAILED::before { background: var(--bad); }
+  .status.PENDING::before, .status.PROCESSING::before { background: var(--flag); }
   main { display: grid; grid-template-columns: 1fr 360px; min-height: 0; }
   #map { min-height: 0; }
-  aside { background: var(--panel); border-left: 1px solid var(--line); overflow-y: auto; min-height: 0; }
+  aside { background: var(--sheet); border-left: 1px solid var(--line); overflow-y: auto; min-height: 0; }
   ul { list-style: none; margin: 0; padding: 0; }
-  li { padding: 10px 16px; border-bottom: 1px solid var(--line); cursor: pointer; }
-  li:hover, li.active { background: var(--chip); }
+  li { padding: 11px 18px; border-bottom: 1px solid var(--line); cursor: pointer; }
+  li:hover, li.active { background: var(--grid); }
+  li:focus-visible { outline: 2px solid var(--flag); outline-offset: -2px; }
   li .row { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; }
   li .name { font-weight: 600; overflow-wrap: anywhere; }
-  li .value { font-variant-numeric: tabular-nums; white-space: nowrap; }
-  li .sub { color: var(--muted); font-size: 12px; margin-top: 2px; }
-  .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; vertical-align: 1px; }
-  .message { padding: 24px 16px; color: var(--muted); }
-  .leaflet-popup-content { font: 13px/1.45 system-ui, sans-serif; margin: 10px 12px; }
+  li .value { font: 500 13px var(--font-mono); white-space: nowrap; }
+  li .sub { color: var(--ink-3); font-size: 12px; margin-top: 2px; }
+  .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 7px; vertical-align: 1px; }
+  .message { padding: 24px 18px; color: var(--ink-2); cursor: default; }
+  .leaflet-container { font-family: var(--font-body); background: var(--grid); }
+  .leaflet-popup-content { font: 13px/1.45 var(--font-body); margin: 10px 12px; }
   .leaflet-popup-content table { border-collapse: collapse; }
   .leaflet-popup-content td { padding: 1px 8px 1px 0; vertical-align: top; }
-  .leaflet-popup-content td:first-child { color: #5c6577; }
+  .leaflet-popup-content td:first-child { color: #5c6660; }
   @media (max-width: 760px) {
+    .filehead { padding: 12px 16px; }
     main { grid-template-columns: 1fr; grid-template-rows: 55vh auto; }
     aside { border-left: 0; border-top: 1px solid var(--line); }
   }
 </style>
 </head>
 <body>
-<header>
+<header class="topbar">
+  <a class="brand" href="/">Survey Measure</a>
+  <nav><a href="/">All files</a><a href="/docs">API docs</a></nav>
+</header>
+<section class="filehead">
   <h1 id="title">Loading…</h1>
   <span id="status" class="status" hidden></span>
   <div class="meta" id="meta"></div>
-</header>
+</section>
 <main>
   <div id="map"></div>
   <aside><ul id="list"><li class="message">Loading features…</li></ul></aside>
 </main>
+<script src="/static/format.js"></script>
 <script>
 (() => {
+  const { fmtArea, fmtLength, esc } = window.SurveyFormat;
   const fileId = location.pathname.split("/").filter(Boolean).pop();
   const css = getComputedStyle(document.documentElement);
   const colour = (f) => {
@@ -76,11 +76,7 @@
     if (!f.measurement) return css.getPropertyValue("--point").trim();
     return css.getPropertyValue(f.measurement.kind === "area" ? "--area" : "--length").trim();
   };
-  const nf = new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 });
-  const fmtArea = (m2) => m2 >= 1e6 ? `${nf.format(m2 / 1e6)} km²` : m2 >= 1e4 ? `${nf.format(m2 / 1e4)} ha` : `${nf.format(m2)} m²`;
-  const fmtLength = (m) => m >= 1000 ? `${nf.format(m / 1000)} km` : `${nf.format(m)} m`;
   const fmtValue = (m) => m.kind === "area" ? fmtArea(m.value) : fmtLength(m.value);
-  const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   // Leaflet joins 179.9 and -179.9 the long way round. Shift a feature's western
   // longitudes by 360 when it spans more than half the globe so it draws where it is.
   function unwrap(geometry) {
@@ -94,7 +90,16 @@
     walk(copy.coordinates, (p) => { if (p[0] < 0) p[0] += 360; });
     return copy;
   }
-  const label = (f) => f.properties.Name || f.properties.name || f.properties.NAME || `Feature ${f.id}`;
+  const NAME_KEYS = ["Name", "name", "NAME", "title", "label"];
+  const label = (f) => {
+    const named = NAME_KEYS.find((k) => f.properties[k]);
+    if (named) return f.properties[named];
+    // Otherwise prefer identifier-like attributes (survey_no, plot_id, code) over any text.
+    const entries = Object.entries(f.properties).filter(([, v]) => (typeof v === "string" && v.trim()) || typeof v === "number");
+    const idLike = entries.find(([k]) => /(name|title|label|number|code|(^|_)no$|(^|_)id$)/i.test(k));
+    const firstText = entries.find(([, v]) => typeof v === "string");
+    return String((idLike || firstText || [null, `Feature ${f.id}`])[1]);
+  };
 
   const map = L.map("map", { worldCopyJump: true }).setView([20, 78], 4);
   L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
@@ -136,7 +141,7 @@
       showMessage(e.message);
       return;
     }
-    document.title = `${info.filename} · Measurement Viewer`;
+    document.title = `${info.filename} · Survey Measure`;
     $("title").textContent = info.filename;
     $("status").hidden = false;
     $("status").textContent = info.status;
@@ -185,11 +190,14 @@
       const value = f.measurement ? fmtValue(f.measurement) : (f.reason || f.status.replace("_", " "));
       li.innerHTML = `<div class="row"><span class="name"><span class="dot" style="background:${colour(f)}"></span>${esc(label(f))}</span><span class="value">${esc(value)}</span></div>`
         + `<div class="sub">${esc(f.geometry_type ?? "No geometry")} · ${esc(f.layer)}${f.warnings.length ? " · " + esc(f.warnings.join(", ")) : ""}</div>`;
-      li.addEventListener("click", () => {
+      li.tabIndex = 0;
+      const focusFeature = () => {
         items.forEach((el) => el.classList.remove("active"));
         li.classList.add("active");
         if (layer) { map.fitBounds(layer.getBounds(), { maxZoom: 17, padding: [40, 40] }); layer.openPopup(); }
-      });
+      };
+      li.addEventListener("click", focusFeature);
+      li.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); focusFeature(); } });
       items.push(li);
       list.appendChild(li);
     }

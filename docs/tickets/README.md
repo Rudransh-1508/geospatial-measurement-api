@@ -16,3 +16,4 @@ Vertical slices in implementation order. Each ticket lists its dependencies and 
 | [T10](T10-accuracy-benchmark.md) | Accuracy benchmark | T05 | Done |
 | [T11](T11-map-viewer.md) | Leaflet map viewer | T07 | Done |
 | [T12](T12-publish.md) | Publish public GitHub repo | T09 | Done |
+| [T13](T13-home-page-and-responsiveness.md) | Home page, non-blocking uploads, faster measurement | T11 | Done |

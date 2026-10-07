@@ -10,6 +10,7 @@ RUN uv sync --frozen --no-dev
 COPY alembic.ini ./
 COPY migrations ./migrations
 COPY app ./app
+COPY samples ./samples
 
 RUN useradd --create-home appuser && mkdir -p /data/uploads && chown appuser /data/uploads
 USER appuser

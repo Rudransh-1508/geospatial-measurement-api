@@ -4,7 +4,7 @@ Upload a zipped **Shapefile**, **KML** or **KMZ** and get the area of every poly
 
 Each feature is measured in **its own local projection centred on that feature**: Lambert Azimuthal Equal-Area for areas, Azimuthal Equidistant for lengths. Every number is then **cross-checked on the WGS84 ellipsoid**, and the API returns the projection it used together with the measured error. At parcel scale the error is about 1e-12 at every latitude. A single global projection such as Web Mercator is off by 2x at 45° and by 130x at 85°.
 
-![Viewer showing survey plots near Pune with measurements](docs/viewer.png)
+![Home page: drop a survey file and see every measured file](docs/home.png)
 
 **Contents:** [Quick start](#quick-start) · [API](#api) · [Architecture](#architecture) · [Design decisions](#design-decisions) · [Testing](#testing) · [Learnings](#learnings) · [Future scope](#future-scope)
 
@@ -25,7 +25,8 @@ Each feature is measured in **its own local projection centred on that feature**
   - Protection against zip-slip and zip bombs, streamed size limits.
   - Alembic migrations and a strict mypy setup.
   - CI that runs unit, API, PostGIS cross-check and full-stack end-to-end tests.
-- **See it.** A built-in map viewer at `/viewer/{id}`.
+- **Use it without code.** A home page at `/` for dragging and dropping files, with live status and a register of measured files, and a map viewer at `/viewer/{id}` for each file.
+- **Fast.** 12,000 polygons are measured in about 2 seconds. Nearby features share cached projections, which made processing 11x faster with no change in accuracy.
 
 ## Quick start
 
@@ -35,9 +36,14 @@ Requires Docker.
 docker compose up -d --build --wait
 ```
 
-This starts the API on <http://localhost:8000>, along with a Celery worker, Redis and PostGIS. Migrations run automatically. Interactive API docs are at <http://localhost:8000/docs>.
+This starts the API on <http://localhost:8000>, along with a Celery worker, Redis and PostGIS. Migrations run automatically.
 
-Try it with a sample file:
+- **<http://localhost:8000>**: the home page. Drop a file, or click a sample, then choose **Open map**.
+- **<http://localhost:8000/docs>**: interactive API docs.
+
+![Map viewer showing four survey parcels near Pune with their areas](docs/viewer.png)
+
+Or use the API directly with a sample file:
 
 ```bash
 curl -F "file=@samples/pune_survey.kml" "http://localhost:8000/api/files/?wait=true"
@@ -87,7 +93,8 @@ Configuration is read from environment variables (see `.env.example`):
 | `GET` | `/api/files/{id}/measurements/` | Per-feature measurements with totals |
 | `GET` | `/api/files/` | List uploads (newest first) |
 | `GET` | `/api/health/` | Liveness and database check |
-| `GET` | `/viewer/{id}` | Map viewer (HTML) |
+| `GET` | `/` | Home page: upload files, see measured files (HTML) |
+| `GET` | `/viewer/{id}` | Map viewer for one file (HTML) |
 
 ### `POST /api/files/`
 
@@ -195,15 +202,15 @@ curl "http://localhost:8000/api/files/<id>/measurements/?limit=2&offset=3"
       "warnings": [],
       "measurement": {
         "kind": "area",
-        "value": 50252.08816727886,
+        "value": 50252.08816679674,
         "unit": "m2",
-        "perimeter": 904.0554725411531,
+        "perimeter": 904.0554730942821,
         "perimeter_unit": "m",
         "method": "local_laea",
-        "projection": "+proj=laea +lat_0=18.533200 +lon_0=73.783660 +x_0=0 +y_0=0 +datum=WGS84 +units=m +no_defs",
+        "projection": "+proj=laea +lat_0=18.53 +lon_0=73.78 +x_0=0 +y_0=0 +datum=WGS84 +units=m +no_defs",
         "geodesic_value": 50252.08815480769,
         "geodesic_perimeter": 904.0554724937334,
-        "relative_difference": 2.4817223935514435e-10
+        "relative_difference": 2.3857822005895523e-10
       }
     },
     {
@@ -247,9 +254,10 @@ Units are always SI base units (m², m); converting to hectares or km² is left 
 
 ```
 app/
-  main.py              FastAPI app: routers, health, viewer
+  main.py              FastAPI app: routers, health, pages, static files
   api/
     files.py           HTTP layer: upload, status, measurements
+    limits.py          Rejects oversized uploads from Content-Length before reading the body
     schemas.py         Pydantic response models (= OpenAPI contract)
   processing/
     archive.py         Format detection, zip-slip / zip-bomb checks, safe extraction
@@ -262,7 +270,10 @@ app/
   db/
     models.py          SQLAlchemy models: Upload, Feature (PostGIS geometry)
     session.py         Engine and session factory
-  viewer/index.html    Leaflet map viewer
+  web/
+    index.html         Home page: drag-and-drop upload, live status, file register
+    viewer.html        Leaflet map viewer for one file
+    static/            Shared theme (CSS tokens, light/dark) and number formatting
 migrations/            Alembic migrations
 scripts/               Sample generator, accuracy benchmark
 tests/                 Unit, API, PostGIS cross-check, e2e
@@ -365,7 +376,7 @@ E2E_BASE_URL=http://localhost:8000 uv run pytest tests/e2e
 | `tests/test_measure.py` | Areas match a **closed-form WGS84 formula** (no pyproj) at 0-89° latitude to 1e-7; exact equator length; antimeridian, holes, MultiPolygons, orientation, invalid/3D/empty/collection inputs; a guard showing Web Mercator would be 2x off |
 | `tests/test_readers.py` | Shapefile attributes, UTM ground-area correction (`grid area / areal scale factor`), Web Mercator input, missing `.prj` (both branches), multi-layer zips, null geometries, nested KML folders, KMZ |
 | `tests/test_archive.py` | Zip-slip, absolute paths, zip bombs (declared and actual bytes), entry limits, incomplete Shapefiles, macOS junk files |
-| `tests/test_api.py` | Every endpoint and status code, pagination, totals, async queueing, queue outage, idempotent reprocessing, cleanup after rejection, filename sanitizing |
+| `tests/test_api.py` | Every endpoint and status code, pagination, totals, async queueing, queue outage, idempotent reprocessing, cleanup after rejection, filename sanitizing, early 413 before the body is read, and a regression test that inline processing never blocks other requests |
 | `tests/test_postgis_crosscheck.py` | Our geodesic values match PostGIS `ST_Area/ST_Length(geography)` to 1e-8; projected values within 1e-5 |
 | `tests/e2e/test_stack.py` | Every sample through API -> Redis -> worker -> PostGIS -> API |
 
@@ -378,6 +389,8 @@ CI (`.github/workflows/ci.yml`) runs all of the above on every push, including a
 - **Measure your own error.** Computing a geodesic value next to every projected value turned "trust me" into a number. Comparing against PostGIS gave a second, independent opinion. For a 137 km line, AEQD and the geodesic differ by about 1e-6. That is a real, explainable effect, which the API reports rather than hides.
 - **The antimeridian breaks naive code in quiet ways.** Averaging longitudes, checking validity in lon/lat, and drawing on a web map all fail for a polygon that spans 179.9° and -179.9°. Doing the work in the local projection fixes most of it in one place.
 - **Real files are messy.** KML puts altitude 0 on everything, LIBKML adds styling fields to every feature, zips arrive with `__MACOSX` folders, and `.prj` files go missing. Turning each of these into a deliberate status, reason or warning made the API predictable.
+- **`async def` is a promise not to block.** The first version of the upload endpoint was `async`, but it called the database and processed files synchronously. A 3 MB upload with `?wait=true` froze every other request for 19 seconds. Making it a plain `def` lets FastAPI run it in a thread pool. A regression test now fails if another request waits behind inline processing.
+- **Profile before optimizing.** The slow part was not the geometry maths. Building a pyproj `Transformer` costs about 0.3 ms, and each feature built four. Snapping projection centres to a 0.01° grid lets nearby features share them: 20 s became 1.7 s, with a test proving the results are unchanged.
 - **Uploads are untrusted input.** A zip header can claim a size it doesn't have, so extraction counts the bytes it actually writes as well as checking the declared sizes.
 
 ## Future scope
